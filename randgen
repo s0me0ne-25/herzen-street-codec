@@ -1,0 +1,22 @@
+#Костыль для win окружения сляпанный вайбкодом в гроке
+
+import sys
+import os
+
+if len(sys.argv) != 2:
+    print("Использование: python randgen <число_байт>", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    n = int(sys.argv[1])
+    if n < 0:
+        raise ValueError
+except ValueError:
+    print("Ошибка: <число_байт> должно быть неотрицательным целым числом", file=sys.stderr)
+    sys.exit(1)
+
+# os.urandom — это именно то, что делает /dev/urandom
+random_bytes = os.urandom(n)
+
+# Выводим в stdout в бинарном виде (без каких-либо преобразований)
+sys.stdout.buffer.write(random_bytes)

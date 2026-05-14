@@ -1,0 +1,8 @@
+#Костыль для win окружения сляпанный вайбкодом в гроке
+import sys
+
+if len(sys.argv) < 2:
+    print("Использование: python printfile <файл>", file=sys.stderr)
+    sys.exit(1)
+
+print(open(sys.argv[1]).read(), end='')
