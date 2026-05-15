@@ -67,6 +67,17 @@ def encode():
     Binary input (raw bytes):
       - Every 2 bytes form a 16-bit index → word from DICT["dict16"]
       - Final single byte (if odd length) → word from DICT["dict8"]
+    Words are written to stdout separated by single spaces.
+
+    Punctuation logic:
+      1. Build cumulative probability ranges from DICT["punct"] once.
+      2. EOS=True at start (forces capitalization of first word).
+      3. After each word:
+         - If EOS: capitalize word and reset flag.
+         - Generate random 0..10000.
+         - If falls into a punctuation range, append the punctuation mark.
+         - If punctuation is [.?!], set EOS=True for the next word.
+    All logging goes exclusively to stderr (suppressed by -q).
     Output text (words + punctuation) is written in CP-1251 encoding.
     """
     log("Starting encoding stream...")
