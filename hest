@@ -3,11 +3,19 @@
 Herzen-Street codec prototype
 
 Usage:
-  hest -e --dict <dictfile> [-q]     # encoding mode (stdin -> stdout)
-  hest -d --dict <dictfile> [-q]     # decoding mode (stdin -> stdout)
-  hest --mkdict <infile> <outfile>   # generate encoding/decoding dictionary
+  hest -e --dict <dictfile> [-q] [-j]     # encoding mode (stdin -> stdout)
+  hest -d --dict <dictfile> [-q] [-j]     # decoding mode (stdin -> stdout)
+  hest --mkdict <infile> [<outfile>] [-j] # generate encoding/decoding dictionary
                                      # from plaintext UTF-8 file
+                                     # (if <outfile> omitted: auto-generates
+                                     # hest-dict-{dict_sha256[:8]}.json or
+                                     # hest-dict-{dict_sha256[:8]}.json.bz2
+                                     # depending on -j flag)
   -q / --quiet suppresses ALL logging to stderr in every mode
+  -j / --bzip2 enables bzip2 compression/decompression of the dictionary JSON
+               (maximum compression level 9 for --mkdict; auto-decompress
+                for -e and -d modes). Decompression errors cause immediate
+                exit with code 1.
 
 License: MIT
 Developer: s0me0ne-25
@@ -47,12 +55,15 @@ from collections import Counter
 import hashlib
 import json
 import random
+import bz2
 
 
 # Global dictionary data (loaded by load_dictionary())
 DICT = None
 # Global quiet mode flag (-q / --quiet)
 QUIET = False
+# Global bzip2 mode flag (-j / --bzip2)
+BZIP2 = False
 
 
 def log(message: str) -> None:
@@ -182,10 +193,14 @@ def decode():
     log("Decoding completed.")
 
 
-def make_dictionary(infile: str, outfile: str):
+def make_dictionary(infile: str, outfile: str | None, bzip2: bool):
     """
     Generate encoding/decoding dictionary from a plaintext UTF-8 file.
-    Currently processes data in memory only (outfile writing is now implemented).
+    If outfile is None (i.e. not supplied on the command line), the filename
+    is auto-generated after SHA-256 checksum calculation using only the
+    first 8 characters of the hash:
+      - Without -j:  hest-dict-{dict_sha256[:8]}.json
+      - With -j:     hest-dict-{dict_sha256[:8]}.json.bz2
 
     Processing steps for cyrillic_words:
       Pass 1 - Register normalization
@@ -195,10 +210,7 @@ def make_dictionary(infile: str, outfile: str):
       Stage 5 - Minimum size check (>= 65792)
       Stage 6 - Iterative thinning to exactly 65792 words
       Stage 7 - Extraction of 8-bit dictionary (256 evenly distributed words)
-      Stage 8 - Final dictionary JSON formation and write to outfile
-                (SHA-256 checksum of dict8 + dict16, punct probabilities)
-
-    The dictionary is now written to outfile with 2-space indentation.
+      Stage 8 - Final dictionary JSON formation (and optional bzip2 compression)
     """
     try:
         with open(infile, 'r', encoding='utf-8') as f:
@@ -327,30 +339,62 @@ def make_dictionary(infile: str, outfile: str):
         "dict16": cyrillic_words
     }
 
+    # Auto-generate outfile if it was not supplied on the command line
+    # (using only the first 8 characters of the SHA-256 hash)
+    if outfile is None:
+        ext = ".json.bz2" if bzip2 else ".json"
+        outfile = f"hest-dict-{dict_sha256[:8]}{ext}"
+        log(f"Auto-generated output filename based on first 8 chars of SHA-256: {outfile}")
+
     log(f"Writing dictionary to '{outfile}'...")
     try:
-        with open(outfile, 'w', encoding='utf-8') as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=2)
-        log(f"Dictionary successfully written to '{outfile}' "
-            f"({len(cyrillic_words_8bit)} 8-bit + {len(cyrillic_words)} 16-bit words)")
+        if bzip2:
+            json_str = json.dumps(json_data, ensure_ascii=False, indent=2)
+            compressed = bz2.compress(json_str.encode('utf-8'), compresslevel=9)
+            with open(outfile, 'wb') as f:
+                f.write(compressed)
+            log(f"Dictionary successfully compressed (bzip2 level 9) and written to '{outfile}' "
+                f"({len(cyrillic_words_8bit)} 8-bit + {len(cyrillic_words)} 16-bit words)")
+        else:
+            with open(outfile, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, ensure_ascii=False, indent=2)
+            log(f"Dictionary successfully written to '{outfile}' "
+                f"({len(cyrillic_words_8bit)} 8-bit + {len(cyrillic_words)} 16-bit words)")
     except Exception as e:
         print(f"Error writing to '{outfile}': {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def load_dictionary(infile: str):
+def load_dictionary(infile: str, bzip2: bool):
     """
     Internal function: load dictionary from JSON file into global DICT variable.
+    Supports both plain JSON and bzip2-compressed JSON (when bzip2=True).
+    Any decompression error (corrupted archive or wrong format) causes
+    immediate error message and exit(1).
     """
     global DICT
 
     log(f"Loading dictionary from '{infile}'...")
     
     try:
-        with open(infile, 'r', encoding='utf-8') as f:
-            DICT = json.load(f)
+        if bzip2:
+            with open(infile, 'rb') as f:
+                compressed = f.read()
+            decompressed = bz2.decompress(compressed)
+            json_str = decompressed.decode('utf-8')
+            DICT = json.loads(json_str)
+            log("Dictionary decompressed successfully.")
+        else:
+            with open(infile, 'r', encoding='utf-8') as f:
+                DICT = json.load(f)
+    except bz2.BZ2Error as e:
+        print(f"Error: Dictionary decompression failed (corrupted archive or not a bzip2 format): {e}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
-        print(f"Error loading dictionary file '{infile}': {e}", file=sys.stderr)
+        if bzip2:
+            print(f"Error: Failed to decompress or parse dictionary '{infile}': {e}", file=sys.stderr)
+        else:
+            print(f"Error loading dictionary file '{infile}': {e}", file=sys.stderr)
         sys.exit(1)
 
     log("Verifying dictionary SHA-256 checksum...")
@@ -412,31 +456,43 @@ def main():
                        help='encoding mode (stdin -> stdout)')
     group.add_argument('-d', '--decode', action='store_true',
                        help='decoding mode (stdin -> stdout)')
-    group.add_argument('--mkdict', nargs=2, metavar=('INFILE', 'OUTFILE'),
-                       help='generate encoding/decoding dictionary from '
-                            'plaintext UTF-8 file INFILE')
+    group.add_argument('--mkdict', nargs='+', metavar=('INFILE', '[OUTFILE]'),
+                       help='generate encoding/decoding dictionary from plaintext '
+                            'UTF-8 file INFILE. If OUTFILE omitted, auto-generates '
+                            'hest-dict-{dict_sha256[:8]}.json (or .json.bz2 if -j)')
     parser.add_argument('--dict', metavar='DICTFILE',
                         help='path to dictionary JSON file (required for -e and -d)')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='quiet mode: suppress ALL logging to stderr')
+    parser.add_argument('-j', '--bzip2', action='store_true',
+                        help='enable bzip2 compression/decompression of dictionary JSON '
+                             '(max level 9 for --mkdict)')
 
     args = parser.parse_args()
 
-    global QUIET
+    global QUIET, BZIP2
     QUIET = args.quiet
+    BZIP2 = args.bzip2
 
     if (args.encode or args.decode) and not args.dict:
         parser.error("--dict DICTFILE is required when using -e or -d")
 
     if args.encode:
-        load_dictionary(args.dict)
+        load_dictionary(args.dict, BZIP2)
         encode()
     elif args.decode:
-        load_dictionary(args.dict)
+        load_dictionary(args.dict, BZIP2)
         decode()
     elif args.mkdict:
-        infile, outfile = args.mkdict
-        make_dictionary(infile, outfile)
+        mkargs = args.mkdict
+        if len(mkargs) == 1:
+            infile = mkargs[0]
+            outfile = None
+        elif len(mkargs) == 2:
+            infile, outfile = mkargs
+        else:
+            parser.error("--mkdict accepts at most two arguments: <infile> [outfile]")
+        make_dictionary(infile, outfile, BZIP2)
 
 
 if __name__ == "__main__":
