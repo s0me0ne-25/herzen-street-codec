@@ -1,7 +1,6 @@
 Генерируем словарь из достаточно большого корпуса русскоязычного текста (тут "Война и Мир" + "Преступление и наказание" + "Тихий Дон")
 ```
-> python hest --mkdict in.txt out.json
-
+> python hest --mkdict in.txt
 Initial Cyrillic words extracted: 1050674
 Stage 1: Register normalization...
 After register normalization: 1050674 words
@@ -27,8 +26,9 @@ Main 16-bit dictionary size after extraction: 65536 words
 Stage 8: Forming final dictionary JSON...
 Calculating dictionary SHA-256 checksum...
 Calculating punctuation probabilities...
-Writing dictionary to 'out.json'...
-Dictionary successfully written to 'out.json' (256 8-bit + 65536 16-bit words)
+Auto-generated output filename based on first 8 chars of SHA-256: hest-dict-c66106f8.json
+Writing dictionary to 'hest-dict-c66106f8.json'...
+Dictionary successfully written to 'hest-dict-c66106f8.json' (256 8-bit + 65536 16-bit words)
 ```
 
 Словари должны быть одинаковы на приёмнике и передатчике, для контроля в структуре словаря предусмотрен хеш (см. `out.json`)
@@ -42,7 +42,7 @@ MD5(test.dat)= 763b96dd75ed2e0e25a2e17f885f6fd8
 
 Кодируем через Herzen-Street и смотрим результат.
 ```
-> type test.dat | python hest -q -e --dict ./out.json > encoded.txt
+> type test.dat | python hest -q -j -e --dict hest-dict-c66106f8.json.bz2 > encoded.txt
 > python printfile encoded.txt
 Смолкли. Семейство, Сущевской следовал названием дерутся белый, запененном дремлете, зажиточно.
 Перекрестки восстановляющую заторе рядами обметана связных. Платки принуждала шепелявя, вмешиваясь
@@ -63,7 +63,7 @@ MD5(test.dat)= 763b96dd75ed2e0e25a2e17f885f6fd8
 
 Декодируем и проверяем совпадение
 ```
-> type encoded.txt | python hest -q -d --dict ./out.json > test_dec.dat
+> type encoded.txt | python hest -q -j -d --dict hest-dict-c66106f8.json.bz2 > test_dec.dat
 > openssl md5 test.dat test_dec.dat
 MD5(test.dat)= 763b96dd75ed2e0e25a2e17f885f6fd8
 MD5(test_dec.dat)= 763b96dd75ed2e0e25a2e17f885f6fd8
