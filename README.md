@@ -11,7 +11,7 @@
 
 Генерируем словарь из достаточно большого корпуса русскоязычного текста (тут "Война и Мир" + "Преступление и наказание" + "Тихий Дон")
 ```
-> python hest --mkdict in.txt
+> python hest -j --mkdict in.txt
 Initial Cyrillic words extracted: 1050674
 Stage 1: Register normalization...
 After register normalization: 1050674 words
@@ -37,12 +37,12 @@ Main 16-bit dictionary size after extraction: 65536 words
 Stage 8: Forming final dictionary JSON...
 Calculating dictionary SHA-256 checksum...
 Calculating punctuation probabilities...
-Auto-generated output filename based on first 8 chars of SHA-256: hest-dict-c66106f8.json
-Writing dictionary to 'hest-dict-c66106f8.json'...
-Dictionary successfully written to 'hest-dict-c66106f8.json' (256 8-bit + 65536 16-bit words)
+Auto-generated output filename based on first 8 chars of SHA-256: hest-dict-c66106f8.json.bz2
+Writing dictionary to 'hest-dict-c66106f8.json.bz2'...
+Dictionary successfully compressed (bzip2 level 9) and written to 'hest-dict-c66106f8.json.bz2' (256 8-bit + 65536 16-bit words)
 ```
 
-Словари должны быть одинаковы на приёмнике и передатчике, для контроля в структуре словаря предусмотрен хеш (см. `out.json`)
+Словари должны быть одинаковы на приёмнике и передатчике, для контроля в структуре словаря предусмотрен хеш (см. JSON-структуру в `hest-dict-c66106f8.json`)
 
 Генерируем тестовый пакет информации
 ```
